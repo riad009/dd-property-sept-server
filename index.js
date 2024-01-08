@@ -1,18 +1,14 @@
+const express = require("express");
+const cors = require("cors");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
+const { format } = require("date-fns"); // Import the date-fns library for date formatting
 
-const express = require('express');
-const cors = require('cors');
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-
-const { format } = require('date-fns'); // Import the date-fns library for date formatting
-
-
-require('dotenv').config()
+require("dotenv").config();
 const app = express();
 const port = process.env.port || 5000;
 
-// atlast copy paste code start 
-
+// atlast copy paste code start
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.xioeeu2.mongodb.net/`;
 
@@ -26,25 +22,24 @@ const client = new MongoClient(uri, {
 app.use(cors());
 app.use(express.json());
 
-
 async function run() {
-
   try {
-
     //--------------------------- post method
 
-    const propertyCollection = client.db('ddproperty').collection('property')
+    const propertyCollection = client.db("ddproperty").collection("property");
+    const favouritesCollection = client
+      .db("ddproperty")
+      .collection("favourites");
 
-
-    app.post('/post/property', async (req, res) => {
+    app.post("/post/property", async (req, res) => {
       const booking = req.body;
 
       // Add the date to the booking object in the required format
       const currentDate = new Date();
-      const formattedDate = format(currentDate, 'dd/MM/yyyy');
+      const formattedDate = format(currentDate, "dd/MM/yyyy");
       booking.date = formattedDate;
 
-      console.log('booking', booking);
+      console.log("booking", booking);
 
       // Insert the modified booking object into the propertyCollection
       const result = await propertyCollection.insertOne(booking);
@@ -52,25 +47,49 @@ async function run() {
       res.send(result);
     });
 
-
     //---------------- post End
-
-
-
 
     //-----------------Get
 
+    app.put("/user/favorites/:email", async (req, res) => {
+      const { propertyId } = req.body;
+      const { email } = req.params;
+
+      try {
+        // Update user's favorites array in the database
+        const updatedUser = await favouritesCollection.findOneAndUpdate(
+          { email },
+          { $addToSet: { favorites: propertyId } },
+          { upsert: true }
+        );
+
+        res.json(updatedUser);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
 
     //get all properties
-    app.get('/get/allPorperties', async (req, res) => {
-      const query = {}
+    app.get("/get/favourites/:email", async (req, res) => {
+      const { email } = req.params;
+
+      const query = {
+        email,
+      };
+      const favorites = await favouritesCollection.findOne(query);
+
+      res.send(favorites);
+    });
+    app.get("/get/allProperties", async (req, res) => {
+      const query = {};
       const cursor = propertyCollection.find(query);
       const review = await cursor.toArray();
-      res.send(review)
-    })
+      res.send(review);
+    });
 
     //get recent properties
-    app.get('/get/latestprojects', async (req, res) => {
+    app.get("/get/latestprojects", async (req, res) => {
       try {
         const properties = await propertyCollection
           .find({})
@@ -80,69 +99,78 @@ async function run() {
 
         res.send(properties);
       } catch (error) {
-        console.error('Error fetching latest projects:', error);
-        res.status(500).send('Internal Server Error');
+        console.error("Error fetching latest projects:", error);
+        res.status(500).send("Internal Server Error");
       }
     });
-
 
     //get videos and virtual tours
 
-    app.get('/get/videos', async (req, res) => {
+    app.get("/get/videos", async (req, res) => {
       const query = {
-        propertyType: 'videos' // Filter by propertyType 'videos'
+        propertyType: "videos", // Filter by propertyType 'videos'
       };
 
       try {
-        const cursor = propertyCollection.find(query).sort({ _id: -1 }).limit(4);
+        const cursor = propertyCollection
+          .find(query)
+          .sort({ _id: -1 })
+          .limit(4);
         const videos = await cursor.toArray();
         res.send(videos);
       } catch (error) {
-        console.error('Error fetching, sorting, and limiting video properties:', error);
-        res.status(500).send('Internal Server Error');
+        console.error(
+          "Error fetching, sorting, and limiting video properties:",
+          error
+        );
+        res.status(500).send("Internal Server Error");
       }
     });
-
 
     //Handpicked for you
-    app.get('/get/handpicked', async (req, res) => {
+    app.get("/get/handpicked", async (req, res) => {
       const query = {
-        propertyType: 'handpicked' // Filter by propertyType 'videos'
+        propertyType: "handpicked", // Filter by propertyType 'videos'
       };
 
       try {
-        const cursor = propertyCollection.find(query).sort({ _id: -1 }).limit(4);
+        const cursor = propertyCollection
+          .find(query)
+          .sort({ _id: -1 })
+          .limit(4);
         const videos = await cursor.toArray();
         res.send(videos);
       } catch (error) {
-        console.error('Error fetching, sorting, and limiting video properties:', error);
-        res.status(500).send('Internal Server Error');
+        console.error(
+          "Error fetching, sorting, and limiting video properties:",
+          error
+        );
+        res.status(500).send("Internal Server Error");
       }
     });
 
-
     //condos
-    app.get('/get/condos', async (req, res) => {
+    app.get("/get/condos", async (req, res) => {
       const pipeline = [
         {
           $match: {
-            category: 'condos',
+            category: "condos",
           },
         },
         {
           $group: {
-            _id: '$category2',
+            _id: "$category2",
             combinedFields: {
               $first: {
-                category: '$category',
-                category2: '$category2',
+                category: "$category",
+                category2: "$category2",
               },
             },
             count: { $sum: 1 },
           },
         },
         {
-          $sort: { _id: 1 } // Sort by the '_id' field in ascending order (you can change it based on your sorting criteria)
+          $sort: { _id: 1 }, // Sort by the '_id' field in ascending order (you can change it based on your sorting criteria)
         },
       ];
 
@@ -151,7 +179,6 @@ async function run() {
 
       res.send(result);
     });
-
 
     //Curated Collections
     // app.get('/get/curated', async (req, res) => {
@@ -175,27 +202,27 @@ async function run() {
 
     //   res.send(result);
     // });
-    app.get('/get/curated', async (req, res) => {
+    app.get("/get/curated", async (req, res) => {
       const pipeline = [
         {
           $match: {
-            category: 'curated',
+            category: "curated",
           },
         },
         {
           $group: {
-            _id: '$category2',
+            _id: "$category2",
             combinedFields: {
               $first: {
-                category: '$category',
-                category2: '$category2',
+                category: "$category",
+                category2: "$category2",
               },
             },
             count: { $sum: 1 },
           },
         },
         {
-          $sort: { _id: 1 } // Sort by the '_id' field in ascending order (you can change it based on your sorting criteria)
+          $sort: { _id: 1 }, // Sort by the '_id' field in ascending order (you can change it based on your sorting criteria)
         },
       ];
 
@@ -205,15 +232,13 @@ async function run() {
       res.send(result);
     });
 
-
-
     // Define a route for fetching category properties
-    app.get('/get/categoryproperty/:category/:category2', async (req, res) => {
+    app.get("/get/categoryproperty/:category/:category2", async (req, res) => {
       try {
         const { category, category2 } = req.params;
 
-        console.log('category', category);
-        console.log('category2', category2);
+        console.log("category", category);
+        console.log("category2", category2);
 
         // Use category and category2 in your query
         const query = {
@@ -228,53 +253,46 @@ async function run() {
 
         res.json(matchingProperties);
       } catch (error) {
-        console.error('Error:', error);
-        res.status(500).send('Internal Server Error');
+        console.error("Error:", error);
+        res.status(500).send("Internal Server Error");
       }
     });
 
-
-
-
-
-
-    app.get('/get/emailWise', async (req, res) => {
-
+    app.get("/get/emailWise", async (req, res) => {
       let query = {};
-      if (req.query.email) { //if email have in req->query
+      if (req.query.email) {
+        //if email have in req->query
         query = {
-          email: req.query.email //then make filter with email address an make object of email 
-        }
+          email: req.query.email, //then make filter with email address an make object of email
+        };
       }
 
       const cursor = propertyCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
-    })
+    });
 
-   
-
-    app.get('/get/search/:location', async (req, res) => {
+    app.get("/get/search/:location", async (req, res) => {
       const location = req.params.location;
 
       try {
         // Modify the query based on the district or city
         const query = {
           $or: [
-            { district: { $regex: new RegExp(location, 'i') } },
-            { city: { $regex: new RegExp(location, 'i') } }
-          ]
+            { district: { $regex: new RegExp(location, "i") } },
+            { city: { $regex: new RegExp(location, "i") } },
+          ],
         };
 
         const aggregationPipeline = [
           { $match: query },
           {
             $group: {
-              _id: { district: '$district', city: '$city' },
-              properties: { $push: '$$ROOT' }
-            }
+              _id: { district: "$district", city: "$city" },
+              properties: { $push: "$$ROOT" },
+            },
           },
-          { $replaceRoot: { newRoot: { $arrayElemAt: ['$properties', 0] } } }
+          { $replaceRoot: { newRoot: { $arrayElemAt: ["$properties", 0] } } },
         ];
 
         const cursor = propertyCollection.aggregate(aggregationPipeline);
@@ -282,21 +300,17 @@ async function run() {
 
         res.send(results);
       } catch (error) {
-        console.error('Error:', error);
-        res.status(500).send('Internal Server Error');
+        console.error("Error:", error);
+        res.status(500).send("Internal Server Error");
       }
     });
 
-
-
-
-
     //price
     // filtering price, bedroom,search
-    app.post('/get/search/property/new', express.json(), async (req, res) => {
+    app.post("/get/search/property/new", express.json(), async (req, res) => {
       const { searchvalue, maxprice, minprice, bedrooms } = req.body;
-      console.log('maxprice', maxprice)
-      console.log('minprice', minprice)
+      console.log("maxprice", maxprice);
+      console.log("minprice", minprice);
       // Construct the aggregation pipeline based on the received data
       const pipeline = [];
 
@@ -305,44 +319,41 @@ async function run() {
 
         pipeline.push({
           $match: {
-            district: { $regex: new RegExp(`\\b${location.state}\\b`, 'i') },
-            city: { $regex: new RegExp(`\\b${location.city}\\b`, 'i') }
-          }
+            district: { $regex: new RegExp(`\\b${location.state}\\b`, "i") },
+            city: { $regex: new RegExp(`\\b${location.city}\\b`, "i") },
+          },
         });
       }
 
       if (bedrooms) {
         pipeline.push({
           $match: {
-            bedrooms: { $in: bedrooms }
-          }
+            bedrooms: { $in: bedrooms },
+          },
         });
       }
-
-
 
       if (minprice) {
         pipeline.push({
           $match: {
-            price: { $gte: minprice }
-          }
+            price: { $gte: minprice },
+          },
         });
       }
       if (maxprice) {
         pipeline.push({
           $match: {
-            price: { $lte: maxprice }
-          }
+            price: { $lte: maxprice },
+          },
         });
       }
       if (maxprice && minprice) {
         pipeline.push({
           $match: {
-            price: { $gte: minprice, $lte: maxprice }
-          }
+            price: { $gte: minprice, $lte: maxprice },
+          },
         });
       }
-
 
       const cursor = propertyCollection.aggregate(pipeline);
 
@@ -355,180 +366,143 @@ async function run() {
       }
     });
 
-
-
-
-
-
-
     //price
 
     //id wise get
-    app.get('/get/property/idWise/:id', async (req, res) => {
+    app.get("/get/property/idWise/:id", async (req, res) => {
       const id = req.params.id;
 
       // Check if the provided ID is in a valid format
       if (!ObjectId.isValid(id)) {
-        return res.status(400).send({ error: 'Invalid ObjectId format' });
+        return res.status(400).send({ error: "Invalid ObjectId format" });
       }
 
       try {
-        const result = await propertyCollection.findOne({ _id: new ObjectId(id) });
+        const result = await propertyCollection.findOne({
+          _id: new ObjectId(id),
+        });
 
         if (!result) {
-          return res.status(404).send({ error: 'Property not found' });
+          return res.status(404).send({ error: "Property not found" });
         }
 
         res.send(result);
       } catch (error) {
         console.error(error);
-        res.status(500).send({ error: 'Internal Server Error' });
+        res.status(500).send({ error: "Internal Server Error" });
       }
     });
 
     //---------------Get End
 
-
-
-
-
-
     //--------------Delete start
 
-
-    app.delete('/delete/property/:id', async (req, res) => {
+    app.delete("/delete/property/:id", async (req, res) => {
       const id = req.params.id;
-      console.log('id', id)
-      const query = { _id: new ObjectId(id) }
-      const result = await propertyCollection.deleteOne(query)
-      res.send(result)
-
-
-    })
-
+      console.log("id", id);
+      const query = { _id: new ObjectId(id) };
+      const result = await propertyCollection.deleteOne(query);
+      res.send(result);
+    });
 
     //--------------Delete End
 
+    //---------- Update start
 
+    app.put("/update/property/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        console.log("id", id);
 
+        const filter = { _id: new ObjectId(id) };
+        const user = req.body;
+        console.log("newpost", user);
+        const option = { upsert: true };
 
-//---------- Update start
+        // Check if user.propertyTitle is truthy before including it in the update
+        let updatedUser = {}; // Initialize updatedUser object
 
+        if (user.propertyTitle) {
+          updatedUser.$set = {
+            propertyTitle: user.propertyTitle,
+          };
+        }
 
-app.put('/update/property/:id', async (req, res) => {
-  try {
-    const id = req.params.id;
-    console.log('id', id);
+        const fieldsToUpdate = [
+          "propertyTitle",
+          "email",
+          "planDescription",
+          "loading",
+          "planBedrooms",
+          "planBathrooms",
+          "planPrice",
+          "pricePostfix",
+          "planSize",
+          "planImage",
+          "description",
+          "propertyType",
+          "unit",
+          "price",
+          "area",
+          "address",
+          "district",
+          "city",
+          "neighborhood",
+          "zip",
+          "country",
+          "googleMapStreetView",
+          "propertyId",
+          "areaSize",
+          "sizePrefix",
+          "landArea",
+          "landAreaSizePostfix",
+          "bedrooms",
+          "bathrooms",
+          "garages",
+          "garageSize",
+          "yearBuild",
+          "videoUrl",
+          "virtualTourUrl",
+          "amenities",
+          "tenure",
+          "developer",
+          "category2",
+          "category",
+        ];
 
-    const filter = { _id: new ObjectId(id) };
-    const user = req.body;
-    console.log('newpost', user)
-    const option = { upsert: true };
-
-    // Check if user.propertyTitle is truthy before including it in the update
-    let updatedUser = {}; // Initialize updatedUser object
-
-    if (user.propertyTitle) {
-        updatedUser.$set = {
-            'propertyTitle': user.propertyTitle,
-        };
-    }
-    
-    const fieldsToUpdate = [
-        'propertyTitle',
-        'email',
-        'planDescription',
-        'loading',
-        'planBedrooms',
-        'planBathrooms',
-        'planPrice',
-        'pricePostfix',
-        'planSize',
-        'planImage',
-        'description',
-        'propertyType',
-        'unit',
-        'price',
-        'area',
-        'address',
-        'district',
-        'city',
-        'neighborhood',
-        'zip',
-        'country',
-        'googleMapStreetView',
-        'propertyId',
-        'areaSize',
-        'sizePrefix',
-        'landArea',
-        'landAreaSizePostfix',
-        'bedrooms',
-        'bathrooms',
-        'garages',
-        'garageSize',
-        'yearBuild',
-        'videoUrl',
-        'virtualTourUrl',
-        'amenities',
-        'tenure',
-        'developer',
-        'category2',
-        'category',
-    ];
-    
-    fieldsToUpdate.forEach(field => {
-        if (user[field]) {
+        fieldsToUpdate.forEach((field) => {
+          if (user[field]) {
             if (!updatedUser.$set) {
-                updatedUser.$set = {};
+              updatedUser.$set = {};
             }
             updatedUser.$set[field] = user[field];
-        }
-    });
-    
-  /* ... (your existing code) */
-  
+          }
+        });
 
-    const result = await propertyCollection.updateOne(filter, updatedUser, option);
-    res.send(result);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Internal Server Error');
+        /* ... (your existing code) */
+
+        const result = await propertyCollection.updateOne(
+          filter,
+          updatedUser,
+          option
+        );
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send("Internal Server Error");
+      }
+    });
+
+    //---------- Update End
+  } finally {
   }
+}
+run().catch((err) => console.log(err));
+
+app.get("/", (req, res) => {
+  res.send("hello6  from mongo");
 });
 
-
-//---------- Update End
-
-
-
-
-
-
-
-
-
-  }
-  finally {
-
-  }
-
-}
-run().catch(err => console.log(err));
-
-
-
-
-
-
-
-
-app.get('/', (req, res) => {
-  res.send('hello6  from mongo')
-})
-
 app.listen(port, () => {
-
-  console.log(`'connect port',${port}`)
-})
-
-
+  console.log(`'connect port',${port}`);
+});
