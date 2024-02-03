@@ -8,6 +8,9 @@ require("dotenv").config();
 const app = express();
 const port = process.env.port || 5000;
 
+const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
+
 // atlast copy paste code start
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.xioeeu2.mongodb.net/`;
@@ -21,6 +24,12 @@ const client = new MongoClient(uri, {
 
 app.use(cors());
 app.use(express.json());
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 async function run() {
   try {
@@ -48,6 +57,38 @@ async function run() {
     });
 
     //---------------- post End
+
+    const storage = multer.diskStorage({});
+
+    const upload = multer({ storage });
+
+    // image upload route
+    app.post("/upload", upload.array("files", 10), async function (req, res) {
+      try {
+        const files = req.files;
+
+        console.log({ files });
+
+        if (!files || files.length === 0) {
+          return res.status(400).json({ error: "No files uploaded" });
+        }
+
+        const uploadPromises = files.map((file) => {
+          return cloudinary.uploader.upload(file.path, {
+            resource_type: "auto",
+          });
+        });
+
+        const results = await Promise.all(uploadPromises);
+
+        const fileUrls = results.map((result) => result.secure_url);
+
+        res.json({ message: "Files uploaded successfully!", urls: fileUrls });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Something went wrong" });
+      }
+    });
 
     //-----------------Get
 
@@ -260,12 +301,14 @@ async function run() {
 
     app.get("/get/emailWise", async (req, res) => {
       let query = {};
+
       if (req.query.email) {
-        //if email have in req->query
-        query = {
-          email: req.query.email, //then make filter with email address an make object of email
-        };
+        // If email is present in req->query
+        query.email = req.query.email; // Filter by email address
       }
+
+      // Add a condition to check if the listingPrice field exists
+      query.listingPrice = { $exists: true };
 
       const cursor = propertyCollection.find(query);
       const result = await cursor.toArray();
