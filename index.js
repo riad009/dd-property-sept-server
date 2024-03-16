@@ -352,56 +352,67 @@ async function run() {
     // filtering price, bedroom,search
     app.post("/get/search/property/new", express.json(), async (req, res) => {
       const { searchvalue, maxprice, minprice, bedrooms } = req.body;
+      console.log("searchvalue", searchvalue);
       console.log("maxprice", maxprice);
       console.log("minprice", minprice);
       // Construct the aggregation pipeline based on the received data
-      const pipeline = [];
 
-      if (searchvalue) {
-        const location = JSON.parse(searchvalue);
+      const location = JSON.parse(searchvalue).state;
 
-        pipeline.push({
-          $match: {
-            district: { $regex: new RegExp(`\\b${location.state}\\b`, "i") },
-            city: { $regex: new RegExp(`\\b${location.city}\\b`, "i") },
-          },
-        });
-      }
+      console.log({ location });
 
-      if (bedrooms) {
-        pipeline.push({
-          $match: {
-            bedrooms: { $in: bedrooms },
-          },
-        });
-      }
+      // const pipeline = [];
 
-      if (minprice) {
-        pipeline.push({
-          $match: {
-            price: { $gte: minprice },
-          },
-        });
-      }
-      if (maxprice) {
-        pipeline.push({
-          $match: {
-            price: { $lte: maxprice },
-          },
-        });
-      }
-      if (maxprice && minprice) {
-        pipeline.push({
-          $match: {
-            price: { $gte: minprice, $lte: maxprice },
-          },
-        });
-      }
+      // if (searchvalue) {
+      //   // const location = JSON.parse(searchvalue);
 
-      const cursor = propertyCollection.aggregate(pipeline);
+      //   pipeline.push({
+      //     $match: {
+      //       district: { $regex: new RegExp(`\\b${location.state}\\b`, "i") },
+      //       city: { $regex: new RegExp(`\\b${location.city}\\b`, "i") },
+      //     },
+      //   });
+      // }
+
+      // if (bedrooms) {
+      //   pipeline.push({
+      //     $match: {
+      //       bedrooms: { $in: bedrooms },
+      //     },
+      //   });
+      // }
+
+      // if (minprice) {
+      //   pipeline.push({
+      //     $match: {
+      //       price: { $gte: minprice },
+      //     },
+      //   });
+      // }
+      // if (maxprice) {
+      //   pipeline.push({
+      //     $match: {
+      //       price: { $lte: maxprice },
+      //     },
+      //   });
+      // }
+      // if (maxprice && minprice) {
+      //   pipeline.push({
+      //     $match: {
+      //       price: { $gte: minprice, $lte: maxprice },
+      //     },
+      //   });
+      // }
+
+      // const cursor = propertyCollection.aggregate(pipeline);
 
       try {
-        const properties = await cursor.toArray();
+        // const properties = await cursor.toArray();
+        const properties = await propertyCollection
+          .find({ location: { $regex: new RegExp(location, "i") } })
+          .toArray();
+
+        console.log({ properties });
         res.send(properties);
       } catch (error) {
         console.error("Error retrieving properties:", error);
