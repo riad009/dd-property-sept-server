@@ -352,65 +352,41 @@ async function run() {
     // filtering price, bedroom,search
     app.post("/get/search/property/new", express.json(), async (req, res) => {
       const { searchvalue, maxprice, minprice, bedrooms } = req.body;
-      console.log("searchvalue", searchvalue);
-      console.log("maxprice", maxprice);
-      console.log("minprice", minprice);
-      // Construct the aggregation pipeline based on the received data
-
       const location = JSON.parse(searchvalue).state;
 
-      console.log({ location });
+      console.log({ searchvalue, maxprice, minprice, bedrooms });
 
-      // const pipeline = [];
-
-      // if (searchvalue) {
-      //   // const location = JSON.parse(searchvalue);
-
-      //   pipeline.push({
-      //     $match: {
-      //       district: { $regex: new RegExp(`\\b${location.state}\\b`, "i") },
-      //       city: { $regex: new RegExp(`\\b${location.city}\\b`, "i") },
-      //     },
-      //   });
-      // }
-
-      // if (bedrooms) {
-      //   pipeline.push({
-      //     $match: {
-      //       bedrooms: { $in: bedrooms },
-      //     },
-      //   });
-      // }
-
-      // if (minprice) {
-      //   pipeline.push({
-      //     $match: {
-      //       price: { $gte: minprice },
-      //     },
-      //   });
-      // }
-      // if (maxprice) {
-      //   pipeline.push({
-      //     $match: {
-      //       price: { $lte: maxprice },
-      //     },
-      //   });
-      // }
-      // if (maxprice && minprice) {
-      //   pipeline.push({
-      //     $match: {
-      //       price: { $gte: minprice, $lte: maxprice },
-      //     },
-      //   });
-      // }
-
-      // const cursor = propertyCollection.aggregate(pipeline);
+      // Check if no query parameters are provided
+      if (!location && !maxprice && !minprice && !bedrooms) {
+        return res
+          .status(400)
+          .send("Please provide at least one query parameter.");
+      }
 
       try {
-        // const properties = await cursor.toArray();
-        const properties = await propertyCollection
-          .find({ location: { $regex: new RegExp(location, "i") } })
-          .toArray();
+        let query = {};
+
+        // Check and add location to the query if provided
+        if (location) {
+          query.location = { $regex: new RegExp(location, "i") };
+        }
+
+        // Check and add maxprice to the query if provided
+        if (maxprice) {
+          query.priceType = { $lte: maxprice };
+        }
+
+        // Check and add minprice to the query if provided
+        if (minprice) {
+          query.priceType = { ...query.priceType, $gte: minprice };
+        }
+
+        // Check and add bedrooms to the query if provided
+        if (bedrooms) {
+          query.bedrooms = bedrooms;
+        }
+
+        const properties = await propertyCollection.find(query).toArray();
 
         console.log({ properties });
         res.send(properties);
