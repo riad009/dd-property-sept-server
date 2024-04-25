@@ -306,13 +306,46 @@ async function run() {
         // If email is present in req->query
         query.email = req.query.email; // Filter by email address
       }
+      if (req.query.type) {
+        query.type = req.query.type;
+      }
 
-      // Add a condition to check if the listingPrice field exists
-      query.listingPrice = { $exists: true };
+      // // Add a condition to check if the listingPrice field exists
+      // query.listingPrice = { $exists: true };
 
       const cursor = propertyCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
+    });
+
+    // Verify API
+    app.put("/api/verify/:id", async (req, res) => {
+      try {
+        const propertyId = new ObjectId(req.params.id);
+        const result = await propertyCollection.findOneAndUpdate(
+          { _id: propertyId },
+          { $set: { status: "verified" } },
+          { returnOriginal: false }
+        );
+        res.json(result.value);
+      } catch (error) {
+        res.status(500).json({ message: "Error verifying property" });
+      }
+    });
+
+    // Decline API
+    app.put("/api/decline/:id", async (req, res) => {
+      try {
+        const propertyId = new ObjectId(req.params.id);
+        const result = await propertyCollection.findOneAndUpdate(
+          { _id: propertyId },
+          { $set: { status: "declined" } },
+          { returnOriginal: false }
+        );
+        res.json(result.value);
+      } catch (error) {
+        res.status(500).json({ message: "Error declining property" });
+      }
     });
 
     app.get("/get/search/:location", async (req, res) => {
