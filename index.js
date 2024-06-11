@@ -9,6 +9,9 @@ const app = express();
 const port = process.env.port || 5000;
 
 const multer = require("multer");
+const bcrypt = require("bcrypt");
+const { verifyToken, createToken } = require("./jwtHelper");
+
 const cloudinary = require("cloudinary").v2;
 
 // atlast copy paste code start
@@ -35,7 +38,31 @@ async function run() {
   try {
     //--------------------------- post method
 
+    function auth(...requiredRoles) {
+      return (req, res, next) => {
+        let token = req.headers.authorization;
+
+        if (!token) {
+          return res.status(401).json({ message: "You are not authorized" });
+        }
+
+        try {
+          const verifiedUser = verifyToken(token);
+
+          if (requiredRoles.includes(verifiedUser.role)) {
+            req.user = verifiedUser;
+            next();
+          } else {
+            return res.status(401).json({ message: "You are not authorized" });
+          }
+        } catch (error) {
+          return res.status(401).json({ message: "Invalid token" });
+        }
+      };
+    }
+
     const propertyCollection = client.db("ddproperty").collection("property");
+    const userCollection = client.db("ddproperty").collection("user");
     const favouritesCollection = client
       .db("ddproperty")
       .collection("favourites");
@@ -62,7 +89,6 @@ async function run() {
 
     const upload = multer({ storage });
 
-    // image upload route
     app.post("/upload", upload.array("files", 10), async function (req, res) {
       try {
         const files = req.files;
@@ -87,6 +113,111 @@ async function run() {
       } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Something went wrong" });
+      }
+    });
+
+    // user
+    app.post("/google-login", async function (req, res) {
+      try {
+        const payload = req.body;
+        const { email } = payload;
+
+        const isUserExist = await userCollection.findOne({ email });
+
+        const token = createToken({
+          email,
+          role: "user",
+        });
+
+        if (isUserExist) {
+          return res.json({ token });
+        }
+
+        await userCollection.insertOne(payload);
+
+        res.json({ token });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Something went wrong" });
+      }
+    });
+
+    app.post("/register", async function (req, res) {
+      try {
+        const payload = req.body;
+        const { email, password } = payload;
+
+        const isUserExist = await userCollection.findOne({
+          email: payload?.email,
+        });
+
+        if (isUserExist) {
+          return res.status(400).json({ message: "User already exists" });
+        }
+
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+        payload.password = hashedPassword;
+
+        const user = await userCollection.insertOne(payload);
+
+        const token = createToken({
+          email,
+          role: user.role || "user",
+        });
+
+        res.json({ token });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Something went wrong" });
+      }
+    });
+
+    app.post("/login", async (req, res) => {
+      const payload = req.body;
+      const { email, password } = payload;
+
+      const user = await userCollection.findOne({ email });
+
+      if (!user) {
+        return res.status(400).json({ message: "User does not exists" });
+      }
+
+      try {
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+          return res.status(400).json({ message: "Invalid password" });
+        }
+
+        const token = createToken({
+          email: user.email,
+          role: user.role || "user",
+        });
+
+        res.json({ token });
+      } catch (err) {
+        console.error("Error logging in user:", err);
+        res.status(500).send("Internal Server Error");
+      }
+    });
+
+    app.get("/user-profile", auth("user", "admin"), async (req, res) => {
+      const email = req?.user?.email;
+
+      console.log({ email });
+
+      try {
+        const userProfile = await userCollection.findOne({ email: email });
+
+        if (!userProfile) {
+          return res.status(400).json({ message: "User not found" });
+        }
+
+        res.json({ data: userProfile });
+      } catch (err) {
+        console.error("Error retrieving user profile:", err);
+        res.status(500).send("Internal Server Error");
       }
     });
 
@@ -139,6 +270,20 @@ async function run() {
           .toArray();
 
         res.send(properties);
+      } catch (error) {
+        console.error("Error fetching latest projects:", error);
+        res.status(500).send("Internal Server Error");
+      }
+    });
+
+    app.get("/property/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const property = await propertyCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        res.send(property);
       } catch (error) {
         console.error("Error fetching latest projects:", error);
         res.status(500).send("Internal Server Error");
@@ -303,15 +448,11 @@ async function run() {
       let query = {};
 
       if (req.query.email) {
-        // If email is present in req->query
-        query.email = req.query.email; // Filter by email address
+        query.email = req.query.email;
       }
-      if (req.query.type) {
-        query.type = req.query.type;
+      if (req.query.type === "Land") {
+        query.propertyType = { $regex: new RegExp("^Land$", "i") };
       }
-
-      // // Add a condition to check if the listingPrice field exists
-      // query.listingPrice = { $exists: true };
 
       const cursor = propertyCollection.find(query);
       const result = await cursor.toArray();
@@ -324,7 +465,7 @@ async function run() {
         const propertyId = new ObjectId(req.params.id);
         const result = await propertyCollection.findOneAndUpdate(
           { _id: propertyId },
-          { $set: { status: "verified" } },
+          { $set: { isVerified: true } },
           { returnOriginal: false }
         );
         res.json(result.value);
@@ -339,7 +480,7 @@ async function run() {
         const propertyId = new ObjectId(req.params.id);
         const result = await propertyCollection.findOneAndUpdate(
           { _id: propertyId },
-          { $set: { status: "declined" } },
+          { $set: { isVerified: false } },
           { returnOriginal: false }
         );
         res.json(result.value);
