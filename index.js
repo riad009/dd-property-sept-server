@@ -613,90 +613,69 @@ async function run() {
 
     //---------- Update start
 
-    app.put("/update/property/:id", async (req, res) => {
+    app.put('/update/property/:id', upload.fields([
+      { name: 'coverImage', maxCount: 1 },
+      { name: 'imageUrls', maxCount: 10 }
+    ]), async (req, res) => {
       try {
         const id = req.params.id;
-        console.log("id", id);
+        const userData = req.body;
 
+        // Construct filter and update objects
         const filter = { _id: new ObjectId(id) };
-        const user = req.body;
-        console.log("newpost", user);
-        const option = { upsert: true };
+        const updatedUser = { $set: {} };
 
-        // Check if user.propertyTitle is truthy before including it in the update
-        let updatedUser = {}; // Initialize updatedUser object
-
-        if (user.propertyTitle) {
-          updatedUser.$set = {
-            propertyTitle: user.propertyTitle,
-          };
-        }
-
+        // List of fields to update from req.body
         const fieldsToUpdate = [
-          "propertyTitle",
-          "email",
-          "planDescription",
-          "loading",
-          "planBedrooms",
-          "planBathrooms",
-          "planPrice",
-          "pricePostfix",
-          "planSize",
-          "planImage",
-          "description",
-          "propertyType",
-          "unit",
-          "price",
-          "area",
-          "address",
-          "district",
-          "city",
-          "neighborhood",
-          "zip",
-          "country",
-          "googleMapStreetView",
-          "propertyId",
-          "areaSize",
-          "sizePrefix",
-          "landArea",
-          "landAreaSizePostfix",
-          "bedrooms",
-          "bathrooms",
-          "garages",
-          "garageSize",
-          "yearBuild",
-          "videoUrl",
-          "virtualTourUrl",
-          "amenities",
-          "tenure",
-          "developer",
-          "category2",
-          "category",
+          'propertyName', 'province', 'city', 'location', 'price',
+          'bedrooms', 'bathrooms', 'size', 'floorSize', 'referenceNote',
+          'headline', 'descriptionEnglish', 'contactName', 'contactEmail',
+          'contactNumber', 'contactAddress'
         ];
 
         fieldsToUpdate.forEach((field) => {
-          if (user[field]) {
-            if (!updatedUser.$set) {
-              updatedUser.$set = {};
-            }
-            updatedUser.$set[field] = user[field];
+          if (userData[field] !== undefined) {
+            updatedUser.$set[field] = userData[field];
           }
         });
 
-        /* ... (your existing code) */
+        // Upload files to Cloudinary and update URLs in updatedUser
+        if (req.files['coverImage']) {
+          const coverImage = req.files['coverImage'][0];
+          const result = await cloudinary.uploader.upload(coverImage.path);
+          updatedUser.$set['coverImage'] = [result.secure_url];
+          //await unlinkFile(coverImage.path);
+        }
 
-        const result = await propertyCollection.updateOne(
-          filter,
-          updatedUser,
-          option
+        if (req.files['imageUrls']) {
+          const imageUrls = req.files['imageUrls'];
+          const imageUrlsArray = [];
+          for (const image of imageUrls) {
+            const result = await cloudinary.uploader.upload(image.path);
+            imageUrlsArray.push(result.secure_url);
+            // await unlinkFile(image.path);
+          }
+          updatedUser.$set['imageUrls'] = imageUrlsArray;
+        }
+
+        if (Object.keys(updatedUser.$set).length === 0) {
+          return res.status(400).send('No valid fields to update');
+        }
+
+        const result = await propertyCollection.updateOne(filter, updatedUser);
+        if (result.matchedCount === 0) {
+          return res.status(404).send('Property not found');
+        }
+        res.status(201).json(
+          {
+            message: 'Property updated successfully'
+          }
         );
-        res.send(result);
       } catch (error) {
         console.error(error);
-        res.status(500).send("Internal Server Error");
+        res.status(500).send('Internal Server Error');
       }
     });
-
     //---------- Update End
   } finally {
   }
