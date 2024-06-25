@@ -222,7 +222,6 @@ async function run() {
     });
     app.put("/update-profile/:id", async (req, res) => {
       const { id } = req.params;
-      console.log("Received request to update profile with ID:", id);
 
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ message: "Invalid ID format" });
@@ -658,7 +657,7 @@ async function run() {
           'propertyName', 'province', 'city', 'location', 'price',
           'bedrooms', 'bathrooms', 'size', 'floorSize', 'referenceNote',
           'headline', 'descriptionEnglish', 'contactName', 'contactEmail',
-          'contactNumber', 'contactAddress'
+          'contactNumber', 'contactAddress', 'video'
         ];
 
         fieldsToUpdate.forEach((field) => {
