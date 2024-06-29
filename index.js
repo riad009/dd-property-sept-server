@@ -220,6 +220,33 @@ async function run() {
         res.status(500).send("Internal Server Error");
       }
     });
+    app.put("/update-profile/:id", async (req, res) => {
+      const { id } = req.params;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+
+      try {
+        const user = await userCollection.findOneAndUpdate(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              email: req.body.email,
+              name: req.body.name,
+              address: req.body.address,
+              phone: req.body.phone
+            }
+          },
+          { returnOriginal: false, projection: { password: 0 } }
+        );
+
+        res.status(200).json({ message: 'User updated successfully', data: user });
+      } catch (error) {
+        console.error("Error updating user:", error);
+        res.status(500).json({ message: 'An error occurred while updating' });
+      }
+    });
 
     //-----------------Get
 
@@ -630,7 +657,7 @@ async function run() {
           'propertyName', 'province', 'city', 'location', 'price',
           'bedrooms', 'bathrooms', 'size', 'floorSize', 'referenceNote',
           'headline', 'descriptionEnglish', 'contactName', 'contactEmail',
-          'contactNumber', 'contactAddress'
+          'contactNumber', 'contactAddress', 'video'
         ];
 
         fieldsToUpdate.forEach((field) => {
