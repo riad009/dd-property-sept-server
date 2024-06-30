@@ -63,26 +63,63 @@ async function run() {
 
     const propertyCollection = client.db("ddproperty").collection("property");
     const userCollection = client.db("ddproperty").collection("user");
-    const favouritesCollection = client
-      .db("ddproperty")
-      .collection("favourites");
+    const favouritesCollection = client.db("ddproperty").collection("favourites");
 
-    app.post("/post/property", async (req, res) => {
-      const booking = req.body;
+    // app.post("/post/property", async (req, res) => {
+    //       const booking = req.body;
 
-      // Add the date to the booking object in the required format
-      const currentDate = new Date();
-      const formattedDate = format(currentDate, "dd/MM/yyyy");
-      booking.date = formattedDate;
+    //       // Add the date to the booking object in the required format
+    //       const currentDate = new Date();
+    //       const formattedDate = format(currentDate, "dd/MM/yyyy");
+    //       booking.date = formattedDate;
 
-      console.log("booking", booking);
+    //       console.log("booking", booking);
 
-      // Insert the modified booking object into the propertyCollection
-      const result = await propertyCollection.insertOne(booking);
+    //       // Insert the modified booking object into the propertyCollection
+    //       const result = await propertyCollection.insertOne(booking);
 
-      res.send(result);
-    });
+    //       res.send(result);
+    //     });
+    // app.post('/post/property', upload.fields([
+    //   { name: 'coverImage', maxCount: 1 },
+    //   { name: 'imageUrls', maxCount: 10 }
+    // ]), async (req, res) => {
+    //   try {
+    //     const booking = req.body;
 
+    //     // Add the date to the booking object in the required format
+    //     const currentDate = new Date();
+    //     const formattedDate = format(currentDate, "dd/MM/yyyy");
+    //     booking.date = formattedDate;
+
+    //     // Handle file uploads to Cloudinary
+    //     if (req.files['coverImage']) {
+    //       const coverImage = req.files['coverImage'][0];
+    //       const result = await cloudinary.uploader.upload(coverImage.path);
+    //       booking.coverImage = [result.secure_url];
+    //       // await unlinkFile(coverImage.path); // Uncomment if you want to delete the file after upload
+    //     }
+
+    //     if (req.files['imageUrls']) {
+    //       const imageUrls = req.files['imageUrls'];
+    //       const imageUrlsArray = [];
+    //       for (const image of imageUrls) {
+    //         const result = await cloudinary.uploader.upload(image.path);
+    //         imageUrlsArray.push(result.secure_url);
+    //         // await unlinkFile(image.path); // Uncomment if you want to delete the file after upload
+    //       }
+    //       booking.imageUrls = imageUrlsArray;
+    //     }
+
+    //     // Insert the modified booking object into the propertyCollection
+    //     const result = await propertyCollection.insertOne(booking);
+
+    //     res.status(201).json({ message: 'Property created successfully', result });
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send('Internal Server Error');
+    //   }
+    // });
     //---------------- post End
 
     const storage = multer.diskStorage({});
@@ -657,7 +694,7 @@ async function run() {
           'propertyName', 'province', 'city', 'location', 'price',
           'bedrooms', 'bathrooms', 'size', 'floorSize', 'referenceNote',
           'headline', 'descriptionEnglish', 'contactName', 'contactEmail',
-          'contactNumber', 'contactAddress', 'video'
+          'contactNumber', 'contactAddress', 'video', 'listingType', 'rentDuration','latLng'
         ];
 
         fieldsToUpdate.forEach((field) => {
@@ -703,6 +740,72 @@ async function run() {
         res.status(500).send('Internal Server Error');
       }
     });
+    app.post('/create/property', upload.fields([
+      { name: 'coverImage', maxCount: 1 },
+      { name: 'imageUrls', maxCount: 10 }
+    ]), async (req, res) => {
+      try {
+        const userData = req.body;
+
+        // Construct the property object
+        const newProperty = {
+          propertyName: userData.propertyName,
+          province: userData.province,
+          city: userData.city,
+          location: userData.location,
+          price: userData.price,
+          bedrooms: userData.bedrooms,
+          bathrooms: userData.bathrooms,
+          size: userData.size,
+          floorSize: userData.floorSize,
+          referenceNote: userData.referenceNote,
+          headline: userData.headline,
+          descriptionEnglish: userData.descriptionEnglish,
+          contactName: userData.contactName,
+          contactEmail: userData.contactEmail,
+          contactNumber: userData.contactNumber,
+          contactAddress: userData.contactAddress,
+          video: userData.video,
+          listingType: userData.listingType,
+          rentDuration: userData.rentDuration,
+          email: userData.email,
+          coverImage: [],
+          imageUrls: [],
+          latLng: userData.latLng
+        };
+
+        // Upload cover image to Cloudinary if provided
+        if (req.files['coverImage']) {
+          const coverImage = req.files['coverImage'][0];
+          const result = await cloudinary.uploader.upload(coverImage.path);
+          newProperty.coverImage = [result.secure_url];
+          // await unlinkFile(coverImage.path);
+        }
+
+        // Upload additional images to Cloudinary if provided
+        if (req.files['imageUrls']) {
+          const imageUrls = req.files['imageUrls'];
+          const imageUrlsArray = [];
+          for (const image of imageUrls) {
+            const result = await cloudinary.uploader.upload(image.path);
+            imageUrlsArray.push(result.secure_url);
+            // await unlinkFile(image.path);
+          }
+          newProperty.imageUrls = imageUrlsArray;
+        }
+
+        // Insert the new property into the database
+        const result = await propertyCollection.insertOne(newProperty);
+        res.status(201).json({
+          message: 'Property created successfully',
+          propertyId: result.insertedId
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+
     //---------- Update End
   } finally {
   }
