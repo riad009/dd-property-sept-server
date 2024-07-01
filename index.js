@@ -275,7 +275,7 @@ async function run() {
               phone: req.body.phone
             }
           },
-          { returnOriginal: false, projection: { password: 0 } }
+          { returnOriginal: false }
         );
 
         res.status(200).json({ message: 'User updated successfully', data: user });
@@ -694,7 +694,7 @@ async function run() {
           'propertyName', 'province', 'city', 'location', 'price',
           'bedrooms', 'bathrooms', 'size', 'floorSize', 'referenceNote',
           'headline', 'descriptionEnglish', 'contactName', 'contactEmail',
-          'contactNumber', 'contactAddress', 'video', 'listingType', 'rentDuration','latLng'
+          'contactNumber', 'contactAddress', 'video', 'listingType', 'rentDuration', 'latLng', "propertyType"
         ];
 
         fieldsToUpdate.forEach((field) => {
@@ -746,11 +746,13 @@ async function run() {
     ]), async (req, res) => {
       try {
         const userData = req.body;
-
+        const date = new Date();
+        date.toLocaleDateString()
         // Construct the property object
         const newProperty = {
           propertyName: userData.propertyName,
           province: userData.province,
+          propertyType: userData.propertyType,
           city: userData.city,
           location: userData.location,
           price: userData.price,
@@ -769,9 +771,10 @@ async function run() {
           listingType: userData.listingType,
           rentDuration: userData.rentDuration,
           email: userData.email,
+          latLng: userData.latLng,
           coverImage: [],
           imageUrls: [],
-          latLng: userData.latLng
+          date: date,
         };
 
         // Upload cover image to Cloudinary if provided
@@ -798,13 +801,14 @@ async function run() {
         const result = await propertyCollection.insertOne(newProperty);
         res.status(201).json({
           message: 'Property created successfully',
-          propertyId: result.insertedId
+          data: result
         });
       } catch (error) {
         console.error(error);
         res.status(500).send('Internal Server Error');
       }
     });
+
 
     //---------- Update End
   } finally {
