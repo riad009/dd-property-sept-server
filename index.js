@@ -63,7 +63,9 @@ async function run() {
 
     const propertyCollection = client.db("ddproperty").collection("property");
     const userCollection = client.db("ddproperty").collection("user");
-    const favouritesCollection = client.db("ddproperty").collection("favourites");
+    const favouritesCollection = client
+      .db("ddproperty")
+      .collection("favourites");
 
     // app.post("/post/property", async (req, res) => {
     //       const booking = req.body;
@@ -272,16 +274,18 @@ async function run() {
               email: req.body.email,
               name: req.body.name,
               address: req.body.address,
-              phone: req.body.phone
-            }
+              phone: req.body.phone,
+            },
           },
           { returnOriginal: false }
         );
 
-        res.status(200).json({ message: 'User updated successfully', data: user });
+        res
+          .status(200)
+          .json({ message: "User updated successfully", data: user });
       } catch (error) {
         console.error("Error updating user:", error);
-        res.status(500).json({ message: 'An error occurred while updating' });
+        res.status(500).json({ message: "An error occurred while updating" });
       }
     });
 
@@ -514,7 +518,7 @@ async function run() {
       if (req.query.email) {
         query.email = req.query.email;
       }
-      if (req.query.type === "Land") {
+      if (req.query.type === "land") {
         query.propertyType = { $regex: new RegExp("^Land$", "i") };
       }
 
@@ -677,138 +681,164 @@ async function run() {
 
     //---------- Update start
 
-    app.put('/update/property/:id', upload.fields([
-      { name: 'coverImage', maxCount: 1 },
-      { name: 'imageUrls', maxCount: 10 }
-    ]), async (req, res) => {
-      try {
-        const id = req.params.id;
-        const userData = req.body;
+    app.put(
+      "/update/property/:id",
+      upload.fields([
+        { name: "coverImage", maxCount: 1 },
+        { name: "imageUrls", maxCount: 10 },
+      ]),
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const userData = req.body;
 
-        // Construct filter and update objects
-        const filter = { _id: new ObjectId(id) };
-        const updatedUser = { $set: {} };
+          // Construct filter and update objects
+          const filter = { _id: new ObjectId(id) };
+          const updatedUser = { $set: {} };
 
-        // List of fields to update from req.body
-        const fieldsToUpdate = [
-          'propertyName', 'province', 'city', 'location', 'price',
-          'bedrooms', 'bathrooms', 'size', 'floorSize', 'referenceNote',
-          'headline', 'descriptionEnglish', 'contactName', 'contactEmail',
-          'contactNumber', 'contactAddress', 'video', 'listingType', 'rentDuration', 'latLng', "propertyType"
-        ];
+          // List of fields to update from req.body
+          const fieldsToUpdate = [
+            "propertyName",
+            "province",
+            "city",
+            "location",
+            "price",
+            "bedrooms",
+            "bathrooms",
+            "size",
+            "floorSize",
+            "referenceNote",
+            "headline",
+            "descriptionEnglish",
+            "contactName",
+            "contactEmail",
+            "contactNumber",
+            "contactAddress",
+            "video",
+            "listingType",
+            "rentDuration",
+            "latLng",
+            "propertyType",
+          ];
 
-        fieldsToUpdate.forEach((field) => {
-          if (userData[field] !== undefined) {
-            updatedUser.$set[field] = userData[field];
+          fieldsToUpdate.forEach((field) => {
+            if (userData[field] !== undefined) {
+              updatedUser.$set[field] = userData[field];
+            }
+          });
+
+          // Upload files to Cloudinary and update URLs in updatedUser
+          if (req.files["coverImage"]) {
+            const coverImage = req.files["coverImage"][0];
+            const result = await cloudinary.uploader.upload(coverImage.path);
+            updatedUser.$set["coverImage"] = [result.secure_url];
+            //await unlinkFile(coverImage.path);
           }
-        });
 
-        // Upload files to Cloudinary and update URLs in updatedUser
-        if (req.files['coverImage']) {
-          const coverImage = req.files['coverImage'][0];
-          const result = await cloudinary.uploader.upload(coverImage.path);
-          updatedUser.$set['coverImage'] = [result.secure_url];
-          //await unlinkFile(coverImage.path);
-        }
-
-        if (req.files['imageUrls']) {
-          const imageUrls = req.files['imageUrls'];
-          const imageUrlsArray = [];
-          for (const image of imageUrls) {
-            const result = await cloudinary.uploader.upload(image.path);
-            imageUrlsArray.push(result.secure_url);
-            // await unlinkFile(image.path);
+          if (req.files["imageUrls"]) {
+            const imageUrls = req.files["imageUrls"];
+            const imageUrlsArray = [];
+            for (const image of imageUrls) {
+              const result = await cloudinary.uploader.upload(image.path);
+              imageUrlsArray.push(result.secure_url);
+              // await unlinkFile(image.path);
+            }
+            updatedUser.$set["imageUrls"] = imageUrlsArray;
           }
-          updatedUser.$set['imageUrls'] = imageUrlsArray;
-        }
 
-        if (Object.keys(updatedUser.$set).length === 0) {
-          return res.status(400).send('No valid fields to update');
-        }
-
-        const result = await propertyCollection.updateOne(filter, updatedUser);
-        if (result.matchedCount === 0) {
-          return res.status(404).send('Property not found');
-        }
-        res.status(201).json(
-          {
-            message: 'Property updated successfully'
+          if (Object.keys(updatedUser.$set).length === 0) {
+            return res.status(400).send("No valid fields to update");
           }
-        );
-      } catch (error) {
-        console.error(error);
-        res.status(500).send('Internal Server Error');
+
+          const result = await propertyCollection.updateOne(
+            filter,
+            updatedUser
+          );
+          if (result.matchedCount === 0) {
+            return res.status(404).send("Property not found");
+          }
+          res.status(201).json({
+            message: "Property updated successfully",
+          });
+        } catch (error) {
+          console.error(error);
+          res.status(500).send("Internal Server Error");
+        }
       }
-    });
-    app.post('/create/property', upload.fields([
-      { name: 'coverImage', maxCount: 1 },
-      { name: 'imageUrls', maxCount: 10 }
-    ]), async (req, res) => {
-      try {
-        const userData = req.body;
-        const date = new Date();
-        date.toLocaleDateString()
-        // Construct the property object
-        const newProperty = {
-          propertyName: userData.propertyName,
-          province: userData.province,
-          propertyType: userData.propertyType,
-          city: userData.city,
-          location: userData.location,
-          price: userData.price,
-          bedrooms: userData.bedrooms,
-          bathrooms: userData.bathrooms,
-          size: userData.size,
-          floorSize: userData.floorSize,
-          referenceNote: userData.referenceNote,
-          headline: userData.headline,
-          descriptionEnglish: userData.descriptionEnglish,
-          contactName: userData.contactName,
-          contactEmail: userData.contactEmail,
-          contactNumber: userData.contactNumber,
-          contactAddress: userData.contactAddress,
-          video: userData.video,
-          listingType: userData.listingType,
-          rentDuration: userData.rentDuration,
-          email: userData.email,
-          latLng: userData.latLng,
-          coverImage: [],
-          imageUrls: [],
-          date: date,
-        };
+    );
+    app.post(
+      "/create/property",
+      upload.fields([
+        { name: "coverImage", maxCount: 1 },
+        { name: "imageUrls", maxCount: 10 },
+      ]),
+      async (req, res) => {
+        try {
+          const userData = req.body;
+          const date = new Date();
+          date.toLocaleDateString();
+          // Construct the property object
+          const newProperty = {
+            // propertyName: userData.propertyName,
+            // province: userData.province,
+            // propertyType: userData.propertyType,
+            // city: userData.city,
+            // location: userData.location,
+            // price: userData.price,
+            // bedrooms: userData.bedrooms,
+            // bathrooms: userData.bathrooms,
+            // size: userData.size,
+            // floorSize: userData.floorSize,
+            // referenceNote: userData.referenceNote,
+            // headline: userData.headline,
+            // descriptionEnglish: userData.descriptionEnglish,
+            // contactName: userData.contactName,
+            // contactEmail: userData.contactEmail,
+            // contactNumber: userData.contactNumber,
+            // contactAddress: userData.contactAddress,
+            // video: userData.video,
+            // listingType: userData.listingType,
+            // rentDuration: userData.rentDuration,
+            // email: userData.email,
+            // latLng: userData.latLng,
+            ...userData,
+            coverImage: [],
+            imageUrls: [],
+            date: date,
+          };
 
-        // Upload cover image to Cloudinary if provided
-        if (req.files['coverImage']) {
-          const coverImage = req.files['coverImage'][0];
-          const result = await cloudinary.uploader.upload(coverImage.path);
-          newProperty.coverImage = [result.secure_url];
-          // await unlinkFile(coverImage.path);
-        }
-
-        // Upload additional images to Cloudinary if provided
-        if (req.files['imageUrls']) {
-          const imageUrls = req.files['imageUrls'];
-          const imageUrlsArray = [];
-          for (const image of imageUrls) {
-            const result = await cloudinary.uploader.upload(image.path);
-            imageUrlsArray.push(result.secure_url);
-            // await unlinkFile(image.path);
+          // Upload cover image to Cloudinary if provided
+          if (req.files["coverImage"]) {
+            const coverImage = req.files["coverImage"][0];
+            const result = await cloudinary.uploader.upload(coverImage.path);
+            newProperty.coverImage = [result.secure_url];
+            // await unlinkFile(coverImage.path);
           }
-          newProperty.imageUrls = imageUrlsArray;
+
+          // Upload additional images to Cloudinary if provided
+          if (req.files["imageUrls"]) {
+            const imageUrls = req.files["imageUrls"];
+            const imageUrlsArray = [];
+            for (const image of imageUrls) {
+              const result = await cloudinary.uploader.upload(image.path);
+              imageUrlsArray.push(result.secure_url);
+              // await unlinkFile(image.path);
+            }
+            newProperty.imageUrls = imageUrlsArray;
+          }
+
+          // Insert the new property into the database
+          const result = await propertyCollection.insertOne(newProperty);
+          res.status(201).json({
+            message: "Property created successfully",
+            data: result,
+          });
+        } catch (error) {
+          console.error(error);
+          res.status(500).send("Internal Server Error");
         }
-
-        // Insert the new property into the database
-        const result = await propertyCollection.insertOne(newProperty);
-        res.status(201).json({
-          message: 'Property created successfully',
-          data: result
-        });
-      } catch (error) {
-        console.error(error);
-        res.status(500).send('Internal Server Error');
       }
-    });
-
+    );
 
     //---------- Update End
   } finally {
