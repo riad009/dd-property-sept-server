@@ -334,7 +334,7 @@ async function run() {
         const properties = await propertyCollection
           .find({})
           .sort({ _id: -1 })
-          .limit(4)
+          .limit(8)
           .toArray();
 
         res.send(properties);
