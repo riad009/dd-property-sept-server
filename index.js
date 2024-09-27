@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-
+const fs = require("fs");
 const { format } = require("date-fns"); // Import the date-fns library for date formatting
 
 require("dotenv").config();
@@ -11,6 +11,7 @@ const port = process.env.port || 5000;
 const multer = require("multer");
 const bcrypt = require("bcrypt");
 const { verifyToken, createToken } = require("./jwtHelper");
+const { PDFDocument } = require("pdf-lib");
 
 const cloudinary = require("cloudinary").v2;
 
@@ -67,62 +68,21 @@ async function run() {
       .db("ddproperty")
       .collection("favourites");
 
-    // app.post("/post/property", async (req, res) => {
-    //       const booking = req.body;
+    const reviewCollection = client.db("ddproperty").collection("review");
 
-    //       // Add the date to the booking object in the required format
-    //       const currentDate = new Date();
-    //       const formattedDate = format(currentDate, "dd/MM/yyyy");
-    //       booking.date = formattedDate;
 
-    //       console.log("booking", booking);
 
-    //       // Insert the modified booking object into the propertyCollection
-    //       const result = await propertyCollection.insertOne(booking);
 
-    //       res.send(result);
-    //     });
-    // app.post('/post/property', upload.fields([
-    //   { name: 'coverImage', maxCount: 1 },
-    //   { name: 'imageUrls', maxCount: 10 }
-    // ]), async (req, res) => {
-    //   try {
-    //     const booking = req.body;
 
-    //     // Add the date to the booking object in the required format
-    //     const currentDate = new Date();
-    //     const formattedDate = format(currentDate, "dd/MM/yyyy");
-    //     booking.date = formattedDate;
 
-    //     // Handle file uploads to Cloudinary
-    //     if (req.files['coverImage']) {
-    //       const coverImage = req.files['coverImage'][0];
-    //       const result = await cloudinary.uploader.upload(coverImage.path);
-    //       booking.coverImage = [result.secure_url];
-    //       // await unlinkFile(coverImage.path); // Uncomment if you want to delete the file after upload
-    //     }
 
-    //     if (req.files['imageUrls']) {
-    //       const imageUrls = req.files['imageUrls'];
-    //       const imageUrlsArray = [];
-    //       for (const image of imageUrls) {
-    //         const result = await cloudinary.uploader.upload(image.path);
-    //         imageUrlsArray.push(result.secure_url);
-    //         // await unlinkFile(image.path); // Uncomment if you want to delete the file after upload
-    //       }
-    //       booking.imageUrls = imageUrlsArray;
-    //     }
 
-    //     // Insert the modified booking object into the propertyCollection
-    //     const result = await propertyCollection.insertOne(booking);
 
-    //     res.status(201).json({ message: 'Property created successfully', result });
-    //   } catch (error) {
-    //     console.error(error);
-    //     res.status(500).send('Internal Server Error');
-    //   }
-    // });
-    //---------------- post End
+
+
+
+
+
 
     const storage = multer.diskStorage({});
 
@@ -275,6 +235,7 @@ async function run() {
               name: req.body.name,
               address: req.body.address,
               phone: req.body.phone,
+              image: req.body.image,
             },
           },
           { returnOriginal: false }
@@ -314,10 +275,14 @@ async function run() {
     app.get("/get/favourites/:email", async (req, res) => {
       const { email } = req.params;
 
+      console.log({ email });
+
       const query = {
         email,
       };
       const favorites = await favouritesCollection.findOne(query);
+
+      console.log({ favorites });
 
       res.send(favorites);
     });
@@ -561,11 +526,12 @@ async function run() {
       const location = req.params.location;
 
       try {
-        // Modify the query based on the district or city
+        // Modify the query based on province, city, and location fields
         const query = {
           $or: [
-            { district: { $regex: new RegExp(location, "i") } },
+            { province: { $regex: new RegExp(location, "i") } },
             { city: { $regex: new RegExp(location, "i") } },
+            { location: { $regex: new RegExp(location, "i") } }, // Add location field in the search
           ],
         };
 
@@ -573,7 +539,11 @@ async function run() {
           { $match: query },
           {
             $group: {
-              _id: { district: "$district", city: "$city" },
+              _id: {
+                province: "$province",
+                city: "$city",
+                location: "$location",
+              },
               properties: { $push: "$$ROOT" },
             },
           },
@@ -592,14 +562,12 @@ async function run() {
 
     //price
     // filtering price, bedroom,search
-    app.post("/get/search/property/new", express.json(), async (req, res) => {
-      const { searchvalue, maxprice, minprice, bedrooms } = req.body;
-      const location = JSON.parse(searchvalue).state;
+    app.post("/get/search/property/new", async (req, res) => {
+      const { location, maxPrice, minPrice, bedrooms, propertyType } = req.body;
 
-      console.log({ searchvalue, maxprice, minprice, bedrooms });
+      console.log("req.body", req.body);
 
-      // Check if no query parameters are provided
-      if (!location && !maxprice && !minprice && !bedrooms) {
+      if (!location && !maxPrice && !minPrice && !bedrooms && !propertyType) {
         return res
           .status(400)
           .send("Please provide at least one query parameter.");
@@ -608,26 +576,36 @@ async function run() {
       try {
         let query = {};
 
-        // Check and add location to the query if provided
-        if (location) {
-          query.location = { $regex: new RegExp(location, "i") };
-        }
-
-        // Check and add maxprice to the query if provided
-        if (maxprice) {
-          query.priceType = { $lte: maxprice };
-        }
-
-        // Check and add minprice to the query if provided
-        if (minprice) {
-          query.priceType = { ...query.priceType, $gte: minprice };
-        }
-
-        // Check and add bedrooms to the query if provided
+        // Handle bedrooms filter
         if (bedrooms) {
           query.bedrooms = bedrooms;
         }
 
+        // Handle location filter (province, city, or location)
+        if (location) {
+          const locationRegex = new RegExp(location, "i");
+          query.$or = [
+            { province: { $regex: locationRegex } },
+            { city: { $regex: locationRegex } },
+            { location: { $regex: locationRegex } },
+          ];
+        }
+
+        // Handle price range filters (minPrice and maxPrice)
+        if (minPrice || maxPrice) {
+          query.price = {};
+          if (minPrice) query.price.$gte = minPrice; // Greater than or equal to minPrice
+          if (maxPrice) query.price.$lte = maxPrice; // Less than or equal to maxPrice
+        }
+
+        // Handle property type filter
+        if (propertyType) {
+          query.propertyType = propertyType;
+        }
+
+        console.log({ query });
+
+        // Execute the query and return results
         const properties = await propertyCollection.find(query).toArray();
 
         console.log({ properties });
@@ -650,13 +628,33 @@ async function run() {
       }
 
       try {
-        const result = await propertyCollection.findOne({
+        // Find the property by ID
+        const property = await propertyCollection.findOne({
           _id: new ObjectId(id),
         });
 
-        if (!result) {
+        if (!property) {
           return res.status(404).send({ error: "Property not found" });
         }
+
+        // Fetch the owner data from the userCollection using the email field from the property
+        const owner = await userCollection.findOne({ email: property.email });
+
+        if (!owner) {
+          return res.status(404).send({ error: "Owner not found" });
+        }
+
+        // Include the owner data in the property result
+        const result = {
+          ...property,
+          owner: {
+            name: owner.name,
+            image: owner.image,
+            email: owner.email,
+            phone: owner.phone,
+            address: owner.address,
+          },
+        };
 
         res.send(result);
       } catch (error) {
@@ -691,6 +689,11 @@ async function run() {
         try {
           const id = req.params.id;
           const userData = req.body;
+          console.log("userData.latLng", userData.latLng);
+          userData.latLng =
+            typeof userData.latLng === "string"
+              ? JSON.parse(userData.latLng)
+              : userData.latLng;
 
           // Construct filter and update objects
           const filter = { _id: new ObjectId(id) };
@@ -778,29 +781,15 @@ async function run() {
           const date = new Date();
           date.toLocaleDateString();
           // Construct the property object
+          console.log("userData?.latLng", userData?.latLng);
+          // const latLng = JSON.parse(userData?.latLng);
+
+          userData.latLng =
+            typeof userData.latLng === "string"
+              ? JSON.parse(userData.latLng)
+              : userData.latLng;
           const newProperty = {
-            // propertyName: userData.propertyName,
-            // province: userData.province,
-            // propertyType: userData.propertyType,
-            // city: userData.city,
-            // location: userData.location,
-            // price: userData.price,
-            // bedrooms: userData.bedrooms,
-            // bathrooms: userData.bathrooms,
-            // size: userData.size,
-            // floorSize: userData.floorSize,
-            // referenceNote: userData.referenceNote,
-            // headline: userData.headline,
-            // descriptionEnglish: userData.descriptionEnglish,
-            // contactName: userData.contactName,
-            // contactEmail: userData.contactEmail,
-            // contactNumber: userData.contactNumber,
-            // contactAddress: userData.contactAddress,
-            // video: userData.video,
-            // listingType: userData.listingType,
-            // rentDuration: userData.rentDuration,
-            // email: userData.email,
-            // latLng: userData.latLng,
+            // latLng,
             ...userData,
             coverImage: [],
             imageUrls: [],
@@ -839,6 +828,187 @@ async function run() {
         }
       }
     );
+
+
+    // make apis for review and rating posting and
+
+    // Create a review
+    app.post("/reviews", async (req, res) => {
+      try {
+        const { propertyId, email, rating, message } = req.body;
+
+        if (!propertyId || !email || !rating || !message) {
+          return res.status(400).json({ message: "All fields are required" });
+        }
+
+        const newReview = {
+          propertyId: new ObjectId(propertyId),
+          email,
+          rating: Number(rating),
+          message,
+          createdAt: new Date()
+        };
+
+        const result = await reviewCollection.insertOne(newReview);
+
+        res.status(201).json({
+          message: "Review created successfully",
+          data: result
+        });
+      } catch (error) {
+        console.error("Error creating review:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+
+    // Get all reviews with populated property and user data
+    app.get("/reviews", async (req, res) => {
+      try {
+        const { email } = req.query;
+
+        let pipeline = [
+          {
+            $lookup: {
+              from: "property",
+              localField: "propertyId",
+              foreignField: "_id",
+              as: "property"
+            }
+          },
+          {
+            $unwind: "$property"
+          },
+          {
+            $lookup: {
+              from: "user",
+              localField: "email",
+              foreignField: "email",
+              as: "user"
+            }
+          },
+          {
+            $unwind: "$user"
+          },
+          {
+            $project: {
+              _id: 1,
+              rating: 1,
+              message: 1,
+              createdAt: 1,
+              email: 1,
+              "property._id": 1,
+              "property.propertyName": 1,
+              "user._id": 1,
+              "user.name": 1,
+              "user.email": 1,
+              "user.image": 1
+            }
+          }
+        ];
+
+        if (email) {
+          pipeline.unshift({ $match: { email } });
+        }
+
+        const reviews = await reviewCollection.aggregate(pipeline).toArray();
+
+        res.status(200).json(reviews);
+      } catch (error) {
+        console.error("Error fetching reviews:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+
+
+    // Get review by ID
+    app.get("/reviews/:propertyId", async (req, res) => {
+      const propertyId = req.params.propertyId;
+
+      try {
+        // Check if the provided ID is in a valid format
+        if (!ObjectId.isValid(propertyId)) {
+          return res.status(400).json({ error: "Invalid property ID format" });
+        }
+
+        const pipeline = [
+          {
+            $match: { propertyId: new ObjectId(propertyId) }
+          },
+          {
+            $lookup: {
+              from: "property",
+              localField: "propertyId",
+              foreignField: "_id",
+              as: "property"
+            }
+          },
+          {
+            $unwind: "$property"
+          },
+          {
+            $lookup: {
+              from: "user",
+              localField: "email",
+              foreignField: "email",
+              as: "user"
+            }
+          },
+          {
+            $unwind: "$user"
+          },
+          {
+            $project: {
+              _id: 1,
+              rating: 1,
+              message: 1,
+              createdAt: 1,
+              email: 1,
+              "property._id": 1,
+              "property.propertyName": 1,
+              "user._id": 1,
+              "user.name": 1,
+              "user.email": 1,
+              "user.image": 1
+            }
+          }
+        ];
+
+        const reviews = await reviewCollection.aggregate(pipeline).toArray();
+
+        if (reviews.length === 0) {
+          return res.status(404).json({ error: "No reviews found for this property" });
+        }
+
+        res.status(200).json(reviews);
+      } catch (error) {
+        console.error("Error fetching reviews:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    // Delete review API
+    app.delete("/reviews/:id", async (req, res) => {
+      const id = req.params.id;
+
+      try {
+        // Check if the provided ID is in a valid format
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ error: "Invalid review ID format" });
+        }
+
+        const query = { _id: new ObjectId(id) };
+        const result = await reviewCollection.deleteOne(query);
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ error: "Review not found" });
+        }
+
+        res.status(200).json({ message: "Review deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting review:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
 
     //---------- Update End
   } finally {
