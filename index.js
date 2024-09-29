@@ -531,7 +531,7 @@ async function run() {
           $or: [
             { province: { $regex: new RegExp(location, "i") } },
             { city: { $regex: new RegExp(location, "i") } },
-            { location: { $regex: new RegExp(location, "i") } }, // Add location field in the search
+            { address: { $regex: new RegExp(location, "i") } }, // Add location field in the search
           ],
         };
 
@@ -542,7 +542,7 @@ async function run() {
               _id: {
                 province: "$province",
                 city: "$city",
-                location: "$location",
+                address: "$address",
               },
               properties: { $push: "$$ROOT" },
             },
@@ -587,7 +587,7 @@ async function run() {
           query.$or = [
             { province: { $regex: locationRegex } },
             { city: { $regex: locationRegex } },
-            { location: { $regex: locationRegex } },
+            { address: { $regex: locationRegex } },
           ];
         }
 
@@ -704,7 +704,7 @@ async function run() {
             "propertyName",
             "province",
             "city",
-            "location",
+            "address",
             "price",
             "bedrooms",
             "bathrooms",
