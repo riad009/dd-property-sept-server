@@ -63,6 +63,7 @@ async function run() {
     }
 
     const propertyCollection = client.db("ddproperty").collection("property");
+    const packageCollection = client.db("ddproperty").collection("packages");
     const userCollection = client.db("ddproperty").collection("user");
     const favouritesCollection = client
       .db("ddproperty")
@@ -710,8 +711,6 @@ async function run() {
             "bathrooms",
             "size",
             "floorSize",
-            "referenceNote",
-            "headline",
             "descriptionEnglish",
             "contactName",
             "contactEmail",
@@ -830,6 +829,51 @@ async function run() {
     );
 
 
+
+    app.put("/packages/:id", async (req, res) => {
+      try {
+        const packageId = req.params.id;
+        const package = req.body;
+
+        console.log("package", package);
+        console.log("packageId", packageId);
+
+        if (!package || !packageId) {
+          return res.status(400).json({ message: "Invalid package data" });
+        }
+
+        await packageCollection.updateOne(
+          { packageId },
+          {
+            $set: {
+              name: package.name,
+              price: package.price,
+              benefits: package.benefits,
+              priceDuration: package.priceDuration,
+            }
+          },
+          { upsert: false }
+        );
+
+        res.status(200).json({
+          message: "Package updated successfully",
+        });
+      } catch (error) {
+        console.error("Error updating package:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+    // Get all packages
+    app.get("/packages", async (req, res) => {
+      try {
+        const packages = await packageCollection.find({}).toArray();
+        res.status(200).json(packages);
+      } catch (error) {
+        console.error("Error retrieving packages:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+
     // make apis for review and rating posting and
 
     // Create a review
@@ -851,10 +895,7 @@ async function run() {
 
         const result = await reviewCollection.insertOne(newReview);
 
-        res.status(201).json({
-          message: "Review created successfully",
-          data: result
-        });
+        res.status(200).json(result);
       } catch (error) {
         console.error("Error creating review:", error);
         res.status(500).json({ message: "Internal Server Error" });
