@@ -3,10 +3,10 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const fs = require("fs");
 const { format } = require("date-fns"); // Import the date-fns library for date formatting
-
+const util = require("util");
 require("dotenv").config();
 const app = express();
-const port = process.env.port || 5000;
+const port = process.env.port || 5003;
 
 const multer = require("multer");
 const bcrypt = require("bcrypt");
@@ -71,20 +71,6 @@ async function run() {
 
     const reviewCollection = client.db("ddproperty").collection("review");
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     const storage = multer.diskStorage({});
 
     const upload = multer({ storage });
@@ -142,37 +128,113 @@ async function run() {
       }
     });
 
-    app.post("/register", async function (req, res) {
-      try {
-        const payload = req.body;
-        const { email, password } = payload;
+    // app.post("/register", async function (req, res) {
+    //   try {
+    //     const payload = req.body;
+    //     const { email, password } = payload;
 
-        const isUserExist = await userCollection.findOne({
-          email: payload?.email,
-        });
+    //     const isUserExist = await userCollection.findOne({
+    //       email: payload?.email,
+    //     });
 
-        if (isUserExist) {
-          return res.status(400).json({ message: "User already exists" });
+    //     if (isUserExist) {
+    //       return res.status(400).json({ message: "User already exists" });
+    //     }
+
+    //     const saltRounds = 10;
+    //     const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    //     payload.password = hashedPassword;
+
+    //     const user = await userCollection.insertOne(payload);
+
+    //     const token = createToken({
+    //       email,
+    //       role: user.role || "user",
+    //     });
+
+    //     res.json({ token });
+    //   } catch (err) {
+    //     console.error(err);
+    //     res.status(500).json({ error: "Something went wrong" });
+    //   }
+    // });
+
+    app.post(
+      "/register",
+      upload.fields([
+        { name: "image", maxCount: 1 },
+        { name: "company_logo", maxCount: 1 },
+      ]),
+      async function (req, res) {
+        try {
+          const payload = req.body;
+          console.log(
+            util.inspect(payload, {
+              showHidden: false,
+              depth: null,
+              colors: true,
+            })
+          );
+
+        
+
+          const { email, password, name, title, role, phoneNumber } = payload;
+
+          const isUserExist = await userCollection.findOne({
+            email: payload?.email,
+          });
+
+          if (isUserExist) {
+            return res.status(400).json({ message: "User already exists" });
+          }
+
+          const saltRounds = 10;
+          const hashedPassword = await bcrypt.hash(password, saltRounds);
+          payload.password = hashedPassword;
+
+          // Handle image uploads
+          let imageUrl = "";
+          let companyLogoUrl = "";
+
+          if (req.files["image"]) {
+            const imageFile = req.files["image"][0];
+            console.log({ imageFile });
+            const result = await cloudinary.uploader.upload(imageFile.path, {
+              resource_type: "auto",
+            });
+            imageUrl = result.secure_url;
+          }
+
+          if (req.files["company_logo"]) {
+            const logoFile = req.files["company_logo"][0];
+            console.log({ logoFile });
+            const result = await cloudinary.uploader.upload(logoFile.path, {
+              resource_type: "auto",
+            });
+            companyLogoUrl = result.secure_url;
+          }
+
+          // Update payload with image URLs
+          payload.image = imageUrl;
+          payload.company_logo = companyLogoUrl;
+
+          console.log({ payload });
+
+          const user = await userCollection.insertOne(payload);
+
+          const token = createToken({
+            email,
+            role: user.role || "user",
+          });
+
+          res.json({ token });
+        } catch (err) {
+          console.error(err);
+          res.status(500).json({ error: "Something went wrong" });
         }
-
-        const saltRounds = 10;
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-        payload.password = hashedPassword;
-
-        const user = await userCollection.insertOne(payload);
-
-        const token = createToken({
-          email,
-          role: user.role || "user",
-        });
-
-        res.json({ token });
-      } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Something went wrong" });
       }
-    });
+    );
 
     app.post("/login", async (req, res) => {
       const payload = req.body;
@@ -220,6 +282,13 @@ async function run() {
         res.status(500).send("Internal Server Error");
       }
     });
+
+// get user profile of role 'agent' with capabilities of searching by their name
+    
+
+
+
+
     app.put("/update-profile/:id", async (req, res) => {
       const { id } = req.params;
 
@@ -828,8 +897,6 @@ async function run() {
       }
     );
 
-
-
     app.put("/packages/:id", async (req, res) => {
       try {
         const packageId = req.params.id;
@@ -850,7 +917,7 @@ async function run() {
               price: package.price,
               benefits: package.benefits,
               priceDuration: package.priceDuration,
-            }
+            },
           },
           { upsert: false }
         );
@@ -890,7 +957,7 @@ async function run() {
           email,
           rating: Number(rating),
           message,
-          createdAt: new Date()
+          createdAt: new Date(),
         };
 
         const result = await reviewCollection.insertOne(newReview);
@@ -913,22 +980,22 @@ async function run() {
               from: "property",
               localField: "propertyId",
               foreignField: "_id",
-              as: "property"
-            }
+              as: "property",
+            },
           },
           {
-            $unwind: "$property"
+            $unwind: "$property",
           },
           {
             $lookup: {
               from: "user",
               localField: "email",
               foreignField: "email",
-              as: "user"
-            }
+              as: "user",
+            },
           },
           {
-            $unwind: "$user"
+            $unwind: "$user",
           },
           {
             $project: {
@@ -942,9 +1009,9 @@ async function run() {
               "user._id": 1,
               "user.name": 1,
               "user.email": 1,
-              "user.image": 1
-            }
-          }
+              "user.image": 1,
+            },
+          },
         ];
 
         if (email) {
@@ -960,7 +1027,6 @@ async function run() {
       }
     });
 
-
     // Get review by ID
     app.get("/reviews/:propertyId", async (req, res) => {
       const propertyId = req.params.propertyId;
@@ -973,29 +1039,29 @@ async function run() {
 
         const pipeline = [
           {
-            $match: { propertyId: new ObjectId(propertyId) }
+            $match: { propertyId: new ObjectId(propertyId) },
           },
           {
             $lookup: {
               from: "property",
               localField: "propertyId",
               foreignField: "_id",
-              as: "property"
-            }
+              as: "property",
+            },
           },
           {
-            $unwind: "$property"
+            $unwind: "$property",
           },
           {
             $lookup: {
               from: "user",
               localField: "email",
               foreignField: "email",
-              as: "user"
-            }
+              as: "user",
+            },
           },
           {
-            $unwind: "$user"
+            $unwind: "$user",
           },
           {
             $project: {
@@ -1009,15 +1075,17 @@ async function run() {
               "user._id": 1,
               "user.name": 1,
               "user.email": 1,
-              "user.image": 1
-            }
-          }
+              "user.image": 1,
+            },
+          },
         ];
 
         const reviews = await reviewCollection.aggregate(pipeline).toArray();
 
         if (reviews.length === 0) {
-          return res.status(404).json({ error: "No reviews found for this property" });
+          return res
+            .status(404)
+            .json({ error: "No reviews found for this property" });
         }
 
         res.status(200).json(reviews);
