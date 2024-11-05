@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const fs = require("fs");
-const { format } = require("date-fns"); // Import the date-fns library for date formatting
+const nodemailer = require("nodemailer");
 const util = require("util");
 require("dotenv").config();
 const app = express();
@@ -12,6 +12,7 @@ const multer = require("multer");
 const bcrypt = require("bcrypt");
 const { verifyToken, createToken } = require("./jwtHelper");
 const { PDFDocument } = require("pdf-lib");
+const sendMail = require("./sendMail");
 
 const cloudinary = require("cloudinary").v2;
 
@@ -1017,17 +1018,17 @@ async function run() {
           {
             $unwind: "$property",
           },
-          {
-            $lookup: {
-              from: "user",
-              localField: "email",
-              foreignField: "email",
-              as: "user",
-            },
-          },
-          {
-            $unwind: "$user",
-          },
+          // {
+          //   $lookup: {
+          //     from: "user",
+          //     localField: "email",
+          //     foreignField: "email",
+          //     as: "user",
+          //   },
+          // },
+          // {
+          //   $unwind: "$user",
+          // },
           {
             $project: {
               _id: 1,
@@ -1037,10 +1038,10 @@ async function run() {
               email: 1,
               "property._id": 1,
               "property.propertyName": 1,
-              "user._id": 1,
-              "user.name": 1,
-              "user.email": 1,
-              "user.image": 1,
+              // "user._id": 1,
+              // "user.name": 1,
+              // "user.email": 1,
+              // "user.image": 1,
             },
           },
         ];
@@ -1061,6 +1062,8 @@ async function run() {
     // Get review by ID
     app.get("/reviews/:propertyId", async (req, res) => {
       const propertyId = req.params.propertyId;
+
+      console.log("propertyId", propertyId)
 
       try {
         // Check if the provided ID is in a valid format
@@ -1083,17 +1086,17 @@ async function run() {
           {
             $unwind: "$property",
           },
-          {
-            $lookup: {
-              from: "user",
-              localField: "email",
-              foreignField: "email",
-              as: "user",
-            },
-          },
-          {
-            $unwind: "$user",
-          },
+          // {
+          //   $lookup: {
+          //     from: "user",
+          //     localField: "email",
+          //     foreignField: "email",
+          //     as: "user",
+          //   },
+          // },
+          // {
+          //   $unwind: "$user",
+          // },
           {
             $project: {
               _id: 1,
@@ -1103,10 +1106,10 @@ async function run() {
               email: 1,
               "property._id": 1,
               "property.propertyName": 1,
-              "user._id": 1,
-              "user.name": 1,
-              "user.email": 1,
-              "user.image": 1,
+              // "user._id": 1,
+              // "user.name": 1,
+              // "user.email": 1,
+              // "user.image": 1,
             },
           },
         ];
@@ -1149,6 +1152,62 @@ async function run() {
         res.status(500).json({ error: "Internal Server Error" });
       }
     });
+
+    // Contact API
+    app.post("/contact", async (req, res) => {
+      const { name, email, message } = req.body;
+
+      if (!name || !email || !message) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      try {
+
+        let mailOptions = {
+          from: email,
+          to: "mohammadjahid0007@gmail.com",
+          subject: "Contact Form Submission",
+          text: `Name: ${name}\nEmail: ${email}\nMessage: ${message}`,
+        };
+
+
+        let info = await sendMail(mailOptions);
+
+        console.log("Message sent: %s", info.messageId);
+        res.status(200).json({ message: "Email sent successfully" });
+      } catch (error) {
+        console.error("Error sending email:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    // Send Verification Email API
+    app.post("/send-verify-email", async (req, res) => {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      try {
+        let mailOptions = {
+          from: "Reachoutpro.ai@gmail.com",
+          to: email,
+          subject: "Account Verification Required",
+          text: "Dear User,\n\nA request has been made to contact you. Please verify your account to proceed.\n\nBest regards,\nThaiproperty4u",
+        };
+
+        let info = await sendMail(mailOptions);
+
+        console.log("Verification email sent: %s", info.messageId);
+        res.status(200).json({ message: "Verification email sent successfully" });
+      } catch (error) {
+        console.error("Error sending verification email:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+
 
     //---------- Update End
   } finally {
