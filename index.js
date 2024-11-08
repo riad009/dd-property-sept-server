@@ -261,24 +261,28 @@ async function run() {
       }
     });
 
-    app.get("/user-profile", auth("user", "admin"), async (req, res) => {
-      const email = req?.user?.email;
+    app.get(
+      "/user-profile",
+      auth("user", "admin", "super_admin"),
+      async (req, res) => {
+        const email = req?.user?.email;
 
-      console.log({ email });
+        console.log({ email });
 
-      try {
-        const userProfile = await userCollection.findOne({ email: email });
+        try {
+          const userProfile = await userCollection.findOne({ email: email });
 
-        if (!userProfile) {
-          return res.status(400).json({ message: "User not found" });
+          if (!userProfile) {
+            return res.status(400).json({ message: "User not found" });
+          }
+
+          res.json({ data: userProfile });
+        } catch (err) {
+          console.error("Error retrieving user profile:", err);
+          res.status(500).send("Internal Server Error");
         }
-
-        res.json({ data: userProfile });
-      } catch (err) {
-        console.error("Error retrieving user profile:", err);
-        res.status(500).send("Internal Server Error");
       }
-    });
+    );
 
     // get user profile of role 'agent' with capabilities of searching by their name
 
